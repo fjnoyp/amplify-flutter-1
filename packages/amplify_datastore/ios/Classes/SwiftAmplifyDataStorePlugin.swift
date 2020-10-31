@@ -24,6 +24,9 @@ public class SwiftAmplifyDataStorePlugin: NSObject, FlutterPlugin {
     private let bridge: DataStoreBridge
     private let flutterModelRegistration: FlutterModels
     
+    private var isRun: Bool = false
+
+    
     init(bridge: DataStoreBridge = DataStoreBridge(), flutterModelRegistration: FlutterModels = FlutterModels()) {
         self.bridge = bridge
         self.flutterModelRegistration = flutterModelRegistration
@@ -51,7 +54,10 @@ public class SwiftAmplifyDataStorePlugin: NSObject, FlutterPlugin {
         case "configure":
             onConfigure(args: arguments, result: result)
         case "query":
-            // try! createTempPosts()
+            if(!isRun){
+                try! createTempPosts()
+                isRun = true
+            }
             onQuery(args: arguments, flutterResult: result)
         default:
             result(FlutterMethodNotImplemented)
@@ -133,7 +139,10 @@ public class SwiftAmplifyDataStorePlugin: NSObject, FlutterPlugin {
     }
     
     private func createTempPosts() throws {
-        _ = try getPlugin().clear()
+
+        
+        //_ = try getPlugin().clear()
+
         func getJSONValue(_ jsonDict: [String: Any]) -> [String: JSONValue]{
             guard let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict) else {
                 print("JSON error")
@@ -149,18 +158,7 @@ public class SwiftAmplifyDataStorePlugin: NSObject, FlutterPlugin {
         
         let models = [SerializedModel(map: getJSONValue(["id": UUID().uuidString,
                                                          "title": "Title 1",
-                                                         "rating": 5,
-                                                         "created": "2020-02-20T20:20:20-08:00"] as [String : Any])),
-                      SerializedModel(map: getJSONValue(["id": UUID().uuidString,
-                                                         "title": "Title 2",
-                                                         "rating": 3] as [String : Any])),
-                      SerializedModel(map: getJSONValue(["id": UUID().uuidString,
-                                                         "title": "Title 3",
-                                                         "rating": 2,
-                                                         "created": "2020-02-02T20:20:20-08:00"] as [String : Any])),
-                      SerializedModel(map: getJSONValue(["id": UUID().uuidString,
-                                                         "title": "Title 4",
-                                                         "created": "2020-02-22T20:20:20-08:00"] as [String : Any]))]
+                                                         "rating": 5] as [String : Any]))]
         try models.forEach { model in
             try getPlugin().save(model, modelSchema: flutterModelRegistration.modelSchemas["Post"]!) { (result) in
                 switch result {
