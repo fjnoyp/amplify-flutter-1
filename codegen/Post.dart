@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
-import 'package:flutter_modelschema/src/ModelSchema/types.dart';
+import 'package:amplify_datastore_plugin_interface/amplify_datastore_plugin_interface.dart';
 
 import 'Blog.dart';
 import 'Comment.dart';
@@ -100,28 +100,17 @@ class Post extends Model {
         'blog': blog.toJson(),
         'comments': comments.map((comment) => comment.toJson())
       };
-}
 
-class PostType extends ModelType<Post> {
-  const PostType();
-
-  @override
-  Post createInstance() {
-    // TODO: determine contents based on Datastore implemenation
-    return Post(); // FIXME
-  }
-}
-
-extension PostSchema on Post {
-  static final QueryField id = QueryField(fieldName: "id");
-  static final QueryField title = QueryField(fieldName: "title");
-  static final QueryField blog = new QueryField(
+  static final QueryField ID = QueryField(fieldName: "id");
+  static final QueryField TITLE = QueryField(fieldName: "title");
+  static final QueryField BLOG = new QueryField(
       fieldName: "blog",
-      fieldType: ModelFieldType(ModelFieldTypeEnum.model, ofModelName: "blog"));
-  static final QueryField comments = new QueryField(
+      fieldType: ModelFieldType(ModelFieldTypeEnum.model,
+          ofModelName: (Blog).toString()));
+  static final QueryField COMMENTS = new QueryField(
       fieldName: "comments",
-      fieldType:
-          ModelFieldType(ModelFieldTypeEnum.model, ofModelName: "comment"));
+      fieldType: ModelFieldType(ModelFieldTypeEnum.model,
+          ofModelName: (Comment).toString()));
 
   static var schema =
       Model.defineSchema(define: (ModelSchemaDefinition modelSchemaDefinition) {
@@ -131,21 +120,30 @@ extension PostSchema on Post {
     modelSchemaDefinition.addField(ModelFieldDefinition.id());
 
     modelSchemaDefinition.addField(ModelFieldDefinition.field(
-        key: PostSchema.title,
+        key: Post.TITLE,
         isRequired: true,
         ofType: ModelFieldType(ModelFieldTypeEnum.string)));
 
     modelSchemaDefinition.addField(ModelFieldDefinition.belongsTo(
-        key: PostSchema.blog,
+        key: Post.BLOG,
         isRequired: false,
         targetName: "blogID",
-        ofModelName: Blog.classType.getTypeName()));
+        ofModelName: (Blog).toString()));
 
     modelSchemaDefinition.addField(ModelFieldDefinition.hasMany(
-      key: PostSchema.comments,
+      key: Post.COMMENTS,
       isRequired: false,
-      ofModelName: Comment.classType.getTypeName(),
-      associatedKey: CommentSchema.post,
+      ofModelName: (Comment).toString(),
+      associatedKey: Comment.POST,
     ));
   });
+}
+
+class PostType extends ModelType<Post> {
+  const PostType();
+
+  @override
+  Post fromJson(Map<String, dynamic> jsonData) {
+    return Post.fromJson(jsonData);
+  }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_modelschema/src/ModelSchema/types.dart';
+import 'package:amplify_datastore_plugin_interface/amplify_datastore_plugin_interface.dart';
 
 import 'Post.dart';
 
@@ -77,25 +77,16 @@ class Comment extends Model {
         content = json['content'];
 
   Map<String, dynamic> toJson() =>
-      {'id': id, 'post': post.toJson(), 'content': content};
-}
+      {'id': id, 'post': post?.toJson(), 'content': content};
 
-class CommentType extends ModelType<Comment> {
-  const CommentType();
+  // Schema Section
 
-  @override
-  Comment createInstance() {
-    // TODO: determine contents based on Datastore implemenation
-    return Comment(); // FIXME
-  }
-}
-
-extension CommentSchema on Comment {
-  static final QueryField id = QueryField(fieldName: "id");
-  static final QueryField post = QueryField(
+  static final QueryField ID = QueryField(fieldName: "id");
+  static final QueryField POST = QueryField(
       fieldName: "post",
-      fieldType: ModelFieldType(ModelFieldTypeEnum.model, ofModelName: "post"));
-  static final QueryField content = QueryField(fieldName: "content");
+      fieldType: ModelFieldType(ModelFieldTypeEnum.model,
+          ofModelName: (Post).toString()));
+  static final QueryField CONTENT = QueryField(fieldName: "content");
 
   static var schema =
       Model.defineSchema(define: (ModelSchemaDefinition modelSchemaDefinition) {
@@ -105,14 +96,23 @@ extension CommentSchema on Comment {
     modelSchemaDefinition.addField(ModelFieldDefinition.id());
 
     modelSchemaDefinition.addField(ModelFieldDefinition.belongsTo(
-        key: CommentSchema.post,
+        key: Comment.POST,
         isRequired: false,
         targetName: "postID",
-        ofModelName: Comment.classType.getTypeName()));
+        ofModelName: (Post).toString()));
 
     modelSchemaDefinition.addField(ModelFieldDefinition.field(
-        key: CommentSchema.content,
+        key: Comment.CONTENT,
         isRequired: true,
         ofType: ModelFieldType(ModelFieldTypeEnum.string)));
   });
+}
+
+class CommentType extends ModelType<Comment> {
+  const CommentType();
+
+  @override
+  Comment fromJson(Map<String, dynamic> jsonData) {
+    return Comment.fromJson(jsonData);
+  }
 }

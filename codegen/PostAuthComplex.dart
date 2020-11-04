@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_modelschema/src/ModelSchema/types.dart';
+import 'package:amplify_datastore_plugin_interface/amplify_datastore_plugin_interface.dart';
 
 import 'Post.dart';
 
@@ -82,12 +82,10 @@ class PostAuthComplex extends Model {
         owner = json['owner'];
 
   Map<String, dynamic> toJson() => {'id': id, 'title': title, 'owner': owner};
-}
 
-extension PostAuthComplexSchema on PostAuthComplex {
-  static final QueryField id = QueryField(fieldName: "id");
-  static final QueryField title = QueryField(fieldName: "title");
-  static final QueryField owner = QueryField(fieldName: "owner");
+  static final QueryField ID = QueryField(fieldName: "id");
+  static final QueryField TITLE = QueryField(fieldName: "title");
+  static final QueryField OWNER = QueryField(fieldName: "owner");
 
   static var schema =
       Model.defineSchema(define: (ModelSchemaDefinition modelSchemaDefinition) {
@@ -96,28 +94,26 @@ extension PostAuthComplexSchema on PostAuthComplex {
 
     modelSchemaDefinition.authRules = [
       AuthRule(
-          allow: AuthStrategy.owner,
+          authStrategy: AuthStrategy.OWNER,
           ownerField: "owner",
           identityClaim: "cognito:username",
           operations: [
-            ModelOperation.create,
-            ModelOperation.update,
-            ModelOperation.delete,
-            ModelOperation.read
+            ModelOperation.CREATE,
+            ModelOperation.UPDATE,
+            ModelOperation.DELETE,
+            ModelOperation.READ
           ])
     ];
-
-    modelSchemaDefinition.pluralName = "PostAuthComplexes";
 
     modelSchemaDefinition.addField(ModelFieldDefinition.id());
 
     modelSchemaDefinition.addField(ModelFieldDefinition.field(
-        key: PostAuthComplexSchema.title,
+        key: PostAuthComplex.TITLE,
         isRequired: true,
         ofType: ModelFieldType(ModelFieldTypeEnum.string)));
 
     modelSchemaDefinition.addField(ModelFieldDefinition.field(
-        key: PostAuthComplexSchema.owner,
+        key: PostAuthComplex.OWNER,
         isRequired: false,
         ofType: ModelFieldType(ModelFieldTypeEnum.string)));
   });

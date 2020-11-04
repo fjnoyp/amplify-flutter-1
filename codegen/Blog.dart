@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
-import 'package:flutter_modelschema/src/ModelSchema/types.dart';
+import 'package:amplify_datastore_plugin_interface/amplify_datastore_plugin_interface.dart';
 
 import 'Post.dart';
 
@@ -9,9 +9,6 @@ type Blog @model {
   id: ID!
   name: String!
   posts: [Post] @connection(keyName: "byBlog", fields: ["id"])
-}
-enum Status {
-
 }
  */
 
@@ -74,54 +71,47 @@ class Blog extends Model {
   Blog.fromJson(Map<String, dynamic> json)
       : id = json['id'],
         name = json['name'],
-        tags = json['tags'] is List
-            ? (json['tags'] as List)
-            : null
-  posts = json['posts'] is List
-  ? (json['posts'] as List)
-      .map((e) => Post.fromJson(e as Map<String, dynamic>))
-      .toList()
-      : null;
+        posts = json['posts'] is List
+            ? (json['posts'] as List)
+                .map((e) => Post.fromJson(e as Map<String, dynamic>))
+                .toList()
+            : null;
 
   Map<String, dynamic> toJson() =>
       {'id': id, 'name': name, 'posts': posts.map((post) => post.toJson())};
 
-}
-
-class BlogType extends ModelType<Blog> {
-  const BlogType();
-
-  @override
-  Blog createInstance() {
-    // TODO: determine contents based on Datastore implemenation
-    return Blog(); // FIXME
-  }
-}
-
-extension BlogSchema on Blog {
-  static final QueryField id = QueryField(fieldName: "id");
-  static final QueryField name = QueryField(fieldName: "name");
-  static final QueryField posts = QueryField(
+  static final QueryField ID = QueryField(fieldName: "id");
+  static final QueryField NAME = QueryField(fieldName: "name");
+  static final QueryField POSTS = QueryField(
       fieldName: "posts",
-      fieldType: ModelFieldType(ModelFieldTypeEnum.model, ofModelName: "post"));
+      fieldType: ModelFieldType(ModelFieldTypeEnum.model,
+          ofModelName: (Post).toString()));
 
   static var schema =
-  Model.defineSchema(define: (ModelSchemaDefinition modelSchemaDefinition) {
+      Model.defineSchema(define: (ModelSchemaDefinition modelSchemaDefinition) {
     modelSchemaDefinition.name = "Blog";
     modelSchemaDefinition.pluralName = "Blogs";
 
     modelSchemaDefinition.addField(ModelFieldDefinition.id());
 
     modelSchemaDefinition.addField(ModelFieldDefinition.field(
-        key: BlogSchema.name,
+        key: Blog.NAME,
         isRequired: true,
         ofType: ModelFieldType(ModelFieldTypeEnum.string)));
 
     modelSchemaDefinition.addField(ModelFieldDefinition.hasMany(
-      key: BlogSchema.posts,
-      isRequired: false,
-      ofModelName: Post.classType.getTypeName(),// Post.type
-      associatedKey: PostSchema.blog,
-    ));
+        key: Blog.POSTS,
+        isRequired: false,
+        ofModelName: (Post).toString(),
+        associatedKey: Post.BLOG));
   });
+}
+
+class BlogType extends ModelType<Blog> {
+  const BlogType();
+
+  @override
+  Blog fromJson(Map<String, dynamic> jsonData) {
+    return Blog.fromJson(jsonData);
+  }
 }
