@@ -1,3 +1,18 @@
+/*
+ * Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * A copy of the License is located at
+ *
+ *  http://aws.amazon.com/apache2.0
+ *
+ * or in the "license" file accompanying this file. This file is distributed
+ * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ * express or implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
 import 'package:flutter/foundation.dart';
 import 'package:amplify_datastore_plugin_interface/amplify_datastore_plugin_interface.dart';
 
@@ -14,7 +29,10 @@ type Comment @model @key(name: "byPost", fields: ["postID", "content"]) {
 
 @immutable
 class Comment extends Model {
-  static const classType = CommentType();
+  static const classType = const CommentType();
+
+  @override
+  getInstanceType() => classType;
 
   final String id;
   final Post post;
@@ -71,8 +89,8 @@ class Comment extends Model {
 
   Comment.fromJson(Map<String, dynamic> json)
       : id = json['id'],
-        post = json['post'] is Map<String, dynamic>
-            ? Post.fromJson(json['post'] as Map<String, dynamic>)
+        post = json['post'] != null
+            ? Post.fromJson(new Map<String, dynamic>.from(json['post']))
             : null,
         content = json['content'];
 
@@ -81,7 +99,7 @@ class Comment extends Model {
 
   // Schema Section
 
-  static final QueryField ID = QueryField(fieldName: "id");
+  static final QueryField ID = QueryField(fieldName: "comment.id");
   static final QueryField POST = QueryField(
       fieldName: "post",
       fieldType: ModelFieldType(ModelFieldTypeEnum.model,
