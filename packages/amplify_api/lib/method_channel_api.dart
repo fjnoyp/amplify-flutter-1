@@ -13,6 +13,7 @@
  * permissions and limitations under the License.
  */
 
+import 'package:amplify_api/src/amplify_rest_api_module.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:amplify_api_plugin_interface/amplify_api_plugin_interface.dart';
@@ -22,6 +23,9 @@ import 'amplify_api.dart';
 const MethodChannel _channel = MethodChannel('com.amazonaws.amplify/api');
 
 class AmplifyAPIMethodChannel extends AmplifyAPI {
+  AmplifyRestAPIModule restAPIModule = AmplifyRestAPIModule(_channel);
+
+  // ====== GraphQL ======
   @override
   GraphQLOperation<T> query<T>({@required GraphQLRequest<T> request}) {
     try {
@@ -72,6 +76,32 @@ class AmplifyAPIMethodChannel extends AmplifyAPI {
     } on PlatformException catch (e) {
       throw _formatError(e);
     }
+  }
+
+  // ====== RestAPI ======
+  @override
+  void cancelRequest(String code) async {
+    restAPIModule.cancelRequest(code);
+  }
+
+  @override
+  RestOperation get({@required RestOptions restOptions}) {
+    return restAPIModule.get(restOptions: restOptions);
+  }
+
+  @override
+  RestOperation put({@required RestOptions restOptions}) {
+    return restAPIModule.put(restOptions: restOptions);
+  }
+
+  @override
+  RestOperation post({@required RestOptions restOptions}) {
+    return restAPIModule.post(restOptions: restOptions);
+  }
+
+  @override
+  RestOperation delete({@required RestOptions restOptions}) {
+    return restAPIModule.delete(restOptions: restOptions);
   }
 
   ApiError _formatError(PlatformException e) {

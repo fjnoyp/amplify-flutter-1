@@ -19,6 +19,13 @@ import Amplify
 import AmplifyPlugins
 
 public class SwiftAmplifyApiPlugin: NSObject, FlutterPlugin {
+    
+    private let restAPIModule: AmplifyRestAPIModule
+
+    init(restAPIModule: AmplifyRestAPIModule = AmplifyRestAPIModule()){
+        self.restAPIModule = restAPIModule
+    }
+    
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "com.amazonaws.amplify/api", binaryMessenger: registrar.messenger())
         let instance = SwiftAmplifyApiPlugin()
@@ -32,17 +39,55 @@ public class SwiftAmplifyApiPlugin: NSObject, FlutterPlugin {
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let arguments = call.arguments as! Dictionary<String,AnyObject>
-        switch call.method {
-        case "query":
-            query(flutterResult: result, request: arguments)
-        case "mutate":
-            mutate(flutterResult: result, request: arguments)
-        default:
-            result(FlutterMethodNotImplemented)
-        }
+        innerHandle(method: call.method, callArgs: call.arguments as Any, result: result)
     }
     
+    // Create separate method to allow unit testing as we cannot mock "FlutterMethodCall"
+    public func innerHandle(method: String, callArgs: Any, result: @escaping FlutterResult){
+        
+        // Rest API
+        if(method == "cancel"){
+            restAPIModule.onCancel(flutterResult: result, code: callArgs as! String)
+            return
+        }
+        
+        // Rest API check
+        var arguments: [String: Any]
+    
+        do {
+            try arguments = checkArguments(args: callArgs as Any)
+        } catch {
+            let errorMap = FlutterApiErrorUtils.createErrorMap(localizedError: "\(error.localizedDescription).\nAn unrecognized error has occurred", recoverySuggestion: "See logs for details")
+            FlutterApiErrorUtils.createFlutterError(flutterResult: result, msg: FlutterApiErrorMessage.MALFORMED.rawValue, errorMap: errorMap)
+            return
+        }
+        
+        //let arguments = call.arguments as! Dictionary<String,AnyObject>
+        switch method {
+            case "get": restAPIModule.onGet(flutterResult: result, arguments: arguments)
+            case "post": restAPIModule.onPost(flutterResult: result, arguments: arguments)
+            case "put": restAPIModule.onPut(flutterResult: result, arguments: arguments)
+            case "delete": restAPIModule.onDelete(flutterResult: result, arguments: arguments)
+                
+            case "query":
+                query(flutterResult: result, request: arguments)
+            case "mutate":
+                mutate(flutterResult: result, request: arguments)
+            default:
+                result(FlutterMethodNotImplemented)
+        }
+    }
+    private func checkArguments(args: Any) throws -> [String: Any] {
+
+        guard let res = args as? [String: Any] else {
+            throw DataStoreError.decodingError("Flutter method call arguments are not a map.",
+                                               "Check the values that are being passed from Dart.")
+        }
+        return res
+    }
+    
+    
+    // ====== GraphQL ======
     func query(flutterResult: @escaping FlutterResult, request: [String: Any]) {
         do  {
             let document = try FlutterApiRequestUtils.getGraphQLDocument(methodChannelRequest: request)
@@ -120,5 +165,4 @@ public class SwiftAmplifyApiPlugin: NSObject, FlutterPlugin {
             FlutterApiErrorUtils.createFlutterError(flutterResult: flutterResult, msg: FlutterApiErrorMessage.MALFORMED.rawValue, errorMap: errorMap)
         }
     }
-    
 }

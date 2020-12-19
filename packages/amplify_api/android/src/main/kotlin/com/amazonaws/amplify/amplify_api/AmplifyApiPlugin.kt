@@ -22,7 +22,9 @@ import android.os.Looper
 import androidx.annotation.NonNull
 import androidx.annotation.VisibleForTesting
 import com.amazonaws.amplify.amplify_api.types.FlutterApiErrorMessage
-import com.amplifyframework.api.ApiException
+import com.amazonaws.amplify.amplify_api.types.FlutterErrorHandler
+import com.amazonaws.amplify.amplify_api.types.AmplifyGraphQLModule
+import com.amazonaws.amplify.amplify_api.types.rest_api.AmplifyRestAPIModule
 import com.amplifyframework.api.aws.AWSApiPlugin
 import com.amplifyframework.api.aws.GsonVariablesSerializer
 import com.amplifyframework.api.graphql.SimpleGraphQLRequest
@@ -45,6 +47,9 @@ class AmplifyApiPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
   private val handler = Handler(Looper.getMainLooper())
   private val LOG = Amplify.Logging.forNamespace("amplify:flutter:api")
 
+  private var graphQLModule : AmplifyGraphQLModule = AmplifyGraphQLModule()
+  private var restAPIModule : AmplifyRestAPIModule = AmplifyRestAPIModule()
+
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.amazonaws.amplify/api")
     channel.setMethodCallHandler(this)
@@ -54,11 +59,31 @@ class AmplifyApiPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
   }
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
+
+    var methodName = call.method
+
+    if(methodName == "cancel"){
+      onCancel(result, (call.arguments as String))
+      return
+    }
+
+    if(methodName == "get" || methodName == "post" || methodName == "put" || methodName == "delete"){
+      if(!restAPIModule.isValidArgumentsMap(result, call.arguments)) return
+    }
+
+    if(methodName == "delete" || methodName == "query" || methodName == "mutate"){
+      if(!graphQLModule.isValidArgumentsMap(result, call.arguments)) return
+    }
+
+    var arguments : Map<String, Any> = call.arguments as Map<String,Any>
+
     when (call.method) {
-      "query" ->
-        query(result, call.arguments as Map<String, Any>)
-      "mutate" ->
-        mutate(result, call.arguments as Map<String, Any>)
+      "get" -> onGet(result, arguments)
+      "post" -> onPost(result, arguments)
+      "put" -> onPut(result, arguments)
+      "delete" -> onDelete(result, arguments)
+      "query" -> query(result, arguments)
+      "mutate" -> mutate(result, arguments)
       else -> result.notImplemented()
     }
   }
@@ -72,16 +97,16 @@ class AmplifyApiPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
       document = request["document"] as String
       variables = request["variables"] as Map<String, Any>
     } catch (e: ClassCastException) {
-      createFlutterError(
+      FlutterErrorHandler.createFlutterError(
               flutterResult,
               FlutterApiErrorMessage.ERROR_CASTING_INPUT_IN_PLATFORM_CODE.toString(),
-              createErrorMap(e))
+              e)
       return
     } catch (e: Exception) {
-      createFlutterError(
+      FlutterErrorHandler.createFlutterError(
               flutterResult,
               FlutterApiErrorMessage.AMPLIFY_REQUEST_MALFORMED.toString(),
-              createErrorMap(e))
+              e)
       return
     }
     Amplify.API.query(
@@ -101,10 +126,10 @@ class AmplifyApiPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         },
         {
           LOG.error("GraphQL query operation failed", it)
-          createFlutterError(
+          FlutterErrorHandler.createFlutterError(
                   flutterResult,
                   FlutterApiErrorMessage.AMPLIFY_API_QUERY_FAILED.toString(),
-                  createErrorMap(it))
+                  it)
         }
     )
   }
@@ -118,16 +143,16 @@ class AmplifyApiPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
       document = request["document"] as String
       variables = request["variables"] as Map<String, Any>
     } catch (e: ClassCastException) {
-      createFlutterError(
+      FlutterErrorHandler.createFlutterError(
               flutterResult,
               FlutterApiErrorMessage.ERROR_CASTING_INPUT_IN_PLATFORM_CODE.toString(),
-              createErrorMap(e))
+              e)
       return
     } catch (e: Exception) {
-      createFlutterError(
+      FlutterErrorHandler.createFlutterError(
               flutterResult,
               FlutterApiErrorMessage.AMPLIFY_REQUEST_MALFORMED.toString(),
-              createErrorMap(e))
+              e)
       return
     }
 
@@ -148,36 +173,37 @@ class AmplifyApiPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             },
             {
               LOG.error("GraphQL mutate operation failed", it)
-              createFlutterError(
+              FlutterErrorHandler.createFlutterError(
                       flutterResult,
                       FlutterApiErrorMessage.AMPLIFY_API_MUTATE_FAILED.toString(),
-                      createErrorMap(it))
+                      it
+              )
             }
     )
   }
 
-  private fun createErrorMap(@NonNull error: Exception): Map<String, Any> {
-    var errorMap = HashMap<String, Any>()
-
-    var localizedError = ""
-    var recoverySuggestion = ""
-    if (error is ApiException) {
-      recoverySuggestion = error.recoverySuggestion
-    }
-    if (error.localizedMessage != null) {
-      localizedError = error.localizedMessage
-    }
-    errorMap.put("PLATFORM_EXCEPTIONS", mapOf(
-            "platform" to "Android",
-            "localizedErrorMessage" to localizedError,
-            "recoverySuggestion" to recoverySuggestion,
-            "errorString" to error.toString()
-    ))
-    return errorMap
+  // ====== RestAPI =======
+  @VisibleForTesting
+  private fun onCancel(
+          @NonNull flutterResult: Result,
+          @NonNull code: String){
+    restAPIModule.onCancel(flutterResult, code)
   }
-
-  private fun createFlutterError(flutterResult: Result, msg: String, errorMap: Map<String, Any>) {
-    handler.post { flutterResult.error("AmplifyException", msg, errorMap) }
+  @VisibleForTesting
+  fun onGet(@NonNull flutterResult: Result, @NonNull arguments: Map<String, *>) {
+    restAPIModule.onGet(flutterResult, arguments)
+  }
+  @VisibleForTesting
+  fun onPost(@NonNull flutterResult: Result, @NonNull arguments: Map<String, *>) {
+    restAPIModule.onPost(flutterResult, arguments)
+  }
+  @VisibleForTesting
+  fun onPut(@NonNull flutterResult: Result, @NonNull arguments: Map<String, *>) {
+    restAPIModule.onPut(flutterResult, arguments)
+  }
+  @VisibleForTesting
+  fun onDelete(@NonNull flutterResult: Result, @NonNull arguments: Map<String, *>) {
+    restAPIModule.onDelete(flutterResult, arguments)
   }
 
   override fun onAttachedToActivity(binding: ActivityPluginBinding) {
