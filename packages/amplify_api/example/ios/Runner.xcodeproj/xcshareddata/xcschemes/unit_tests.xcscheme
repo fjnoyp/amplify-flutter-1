@@ -23,9 +23,9 @@
          </BuildableReference>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "84DD78A8258D7DD200AEE2B1"
-            BuildableName = "amplify_api_unit_tests.xctest"
-            BlueprintName = "amplify_api_unit_tests"
+            BlueprintIdentifier = "849082E525903801005C6980"
+            BuildableName = "unit_tests.xctest"
+            BlueprintName = "unit_tests"
             ReferencedContainer = "container:Runner.xcodeproj">
          </BuildableReference>
          <BuildableReference
@@ -41,9 +41,9 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "84DD78A8258D7DD200AEE2B1"
-               BuildableName = "amplify_api_unit_tests.xctest"
-               BlueprintName = "amplify_api_unit_tests"
+               BlueprintIdentifier = "849082E525903801005C6980"
+               BuildableName = "unit_tests.xctest"
+               BlueprintName = "unit_tests"
                ReferencedContainer = "container:Runner.xcodeproj">
             </BuildableReference>
          </TestableReference>
