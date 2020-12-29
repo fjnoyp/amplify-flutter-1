@@ -47,7 +47,7 @@ public class SwiftAmplifyApiPlugin: NSObject, FlutterPlugin {
         
         // Rest API
         if(method == "cancel"){
-            restAPIModule.onCancel(flutterResult: result, cancelToken: callArgs as! String)
+            onCancel(flutterResult: result, cancelToken: callArgs as! String)
             return
         }
         
@@ -88,6 +88,18 @@ public class SwiftAmplifyApiPlugin: NSObject, FlutterPlugin {
         return res
     }
     
+    public func onCancel(flutterResult: @escaping FlutterResult, cancelToken: String){
+        if(OperationsManager.containsOperation(cancelToken: cancelToken)){
+            OperationsManager.cancelOperation(cancelToken: cancelToken)
+            flutterResult("Operation Canceled")
+        }
+        else{
+            flutterResult(FlutterError(
+                            code: "Cancel - RestOperation referenced with code not found",
+                            message: "The RestOperation may have already completed or expired and cannot be canceled anymore",
+                            details: "Operation does not exist"))
+        }
+    }
     
     // ====== GraphQL ======
     func query(flutterResult: @escaping FlutterResult, request: [String: Any]) {
