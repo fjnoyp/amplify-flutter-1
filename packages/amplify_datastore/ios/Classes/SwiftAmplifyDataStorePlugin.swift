@@ -80,9 +80,17 @@ public class SwiftAmplifyDataStorePlugin: NSObject, FlutterPlugin {
 
     private func onConfigureModelProvider(args: [String: Any], result: @escaping FlutterResult) {
 
-        guard let modelSchemaList = args["modelSchemas"] as? [[String: Any]] else {
-            result(false)
-            return //TODO
+        guard let modelSchemaList = args["modelSchemas"] as? [[String: Any]], let modelProviderVersion = args["modelProviderVersion"] as? String else {
+            
+            FlutterDataStoreErrorHandler.handleDataStoreError(
+                error:
+                    DataStoreError.decodingError(
+                        "Received invalid request from Dart, modelSchemas and/or modelProviderVersion are not available. Request: " + args.description,
+                        "Check the values that are being passed from Dart."
+                    ),
+                flutterResult: result
+            )
+            return
         }
 
         do {
@@ -94,6 +102,7 @@ public class SwiftAmplifyDataStorePlugin: NSObject, FlutterPlugin {
             modelSchemas.forEach { (modelSchema) in
                 flutterModelRegistration.addModelSchema(modelName: modelSchema.name, modelSchema: modelSchema)
             }
+            flutterModelRegistration.version = modelProviderVersion
 
             self.dataStoreHubEventStreamHandler?.registerModelsForHub(flutterModels: flutterModelRegistration)
 
