@@ -275,21 +275,21 @@ class AmplifyAuthCognitoMethodChannel extends AmplifyAuthCognito {
 
   @override
   Future<UpdateUserAttributeResult> updateUserAttribute(
-      {@required UpdateUserAttributeRequest request}) async {
+      {UpdateUserAttributeRequest? request}) async {
     UpdateUserAttributeResult res;
     try {
-      final Map<String, dynamic> data =
+      final Map<String, dynamic>? data =
           await _channel.invokeMapMethod<String, dynamic>(
         'updateUserAttribute',
         <String, dynamic>{
           'data': request != null ? request.serializeAsMap() : null,
         },
       );
+      if (data == null) throw nullMapFromMethodChannelException;
       return _formatUpdateUserAttributeResponse(data);
     } on PlatformException catch (e) {
-      castAndThrowPlatformException(e);
+      throw castAndReturnPlatformException(e);
     }
-    return res;
   }
 
   @override
@@ -313,7 +313,7 @@ class AmplifyAuthCognitoMethodChannel extends AmplifyAuthCognito {
 
   @override
   Future<ConfirmUserAttributeResult> confirmUserAttribute(
-      {@required ConfirmUserAttributeRequest request}) async {
+      {ConfirmUserAttributeRequest? request}) async {
     ConfirmUserAttributeResult res;
     try {
       await _channel.invokeMapMethod<String, dynamic>(
@@ -324,30 +324,29 @@ class AmplifyAuthCognitoMethodChannel extends AmplifyAuthCognito {
       );
       return _formatConfirmUserAttributeResponse();
     } on PlatformException catch (e) {
-      castAndThrowPlatformException(e);
+      throw castAndReturnPlatformException(e);
     }
-    return res;
   }
 
   @override
   Future<ResendUserAttributeConfirmationCodeResult>
       resendUserAttributeConfirmationCode({
-    @required ResendUserAttributeConfirmationCodeRequest request,
+    ResendUserAttributeConfirmationCodeRequest? request,
   }) async {
     ResendUserAttributeConfirmationCodeResult res;
     try {
-      final Map<String, dynamic> data =
+      final Map<String, dynamic>? data =
           await _channel.invokeMapMethod<String, dynamic>(
         'resendUserAttributeConfirmationCode',
         <String, dynamic>{
           'data': request != null ? request.serializeAsMap() : null,
         },
       );
+      if (data == null) throw nullMapFromMethodChannelException;
       return _formatResendUserAttributeConfirmationCodeResponse(data);
     } on PlatformException catch (e) {
-      castAndThrowPlatformException(e);
+      throw castAndReturnPlatformException(e);
     }
-    return res;
   }
 
   SignUpResult _formatSignUpResponse(Map<String, dynamic> res, method) {
@@ -357,17 +356,15 @@ class AmplifyAuthCognitoMethodChannel extends AmplifyAuthCognito {
         nextStep: AuthNextSignUpStep(
             signUpStep: res["nextStep"]["signUpStep"],
             codeDeliveryDetails: codeDeliveryDetails != null
-            ? AuthCodeDeliveryDetails(
-              attributeName: codeDeliveryDetails["attributeName"],
-              deliveryMedium: codeDeliveryDetails["deliveryMedium"],
-              destination: codeDeliveryDetails["destination"])
-            : null,
+                ? AuthCodeDeliveryDetails(
+                    attributeName: codeDeliveryDetails["attributeName"],
+                    deliveryMedium: codeDeliveryDetails["deliveryMedium"],
+                    destination: codeDeliveryDetails["destination"])
+                : null,
             additionalInfo: res["nextStep"]["additionalInfo"] is String
-            ? jsonDecode(res["nextStep"]["additionalInfo"])
-            : null
-        ));
+                ? jsonDecode(res["nextStep"]["additionalInfo"])
+                : null));
   }
-
 
   ResendSignUpCodeResult _formatResendSignUpResponse(
       Map<String, dynamic> res, method) {
@@ -385,14 +382,13 @@ class AmplifyAuthCognitoMethodChannel extends AmplifyAuthCognito {
             signInStep: res["nextStep"]["signInStep"],
             codeDeliveryDetails: codeDeliveryDetails != null
                 ? AuthCodeDeliveryDetails(
-                attributeName: codeDeliveryDetails["attributeName"],
-                deliveryMedium: codeDeliveryDetails["deliveryMedium"],
-                destination: codeDeliveryDetails["destination"])
+                    attributeName: codeDeliveryDetails["attributeName"],
+                    deliveryMedium: codeDeliveryDetails["deliveryMedium"],
+                    destination: codeDeliveryDetails["destination"])
                 : null,
             additionalInfo: res["nextStep"]["additionalInfo"] is String
                 ? jsonDecode(res["nextStep"]["additionalInfo"])
-                : null
-          ));
+                : null));
   }
 
   UpdatePasswordResult _formatPasswordResponse(Map<String, dynamic> res) {
@@ -426,15 +422,15 @@ class AmplifyAuthCognitoMethodChannel extends AmplifyAuthCognito {
         nextStep: ResetPasswordStep(
             updateStep: res["nextStep"]["resetPasswordStep"],
             codeDeliveryDetails: codeDeliveryDetails != null
-              ? AuthCodeDeliveryDetails(
-              attributeName: codeDeliveryDetails["attributeName"] ?? null,
-              deliveryMedium: codeDeliveryDetails["deliveryMedium"] ?? null,
-              destination: codeDeliveryDetails["destination"])
-              : null,
+                ? AuthCodeDeliveryDetails(
+                    attributeName: codeDeliveryDetails["attributeName"] ?? null,
+                    deliveryMedium:
+                        codeDeliveryDetails["deliveryMedium"] ?? null,
+                    destination: codeDeliveryDetails["destination"])
+                : null,
             additionalInfo: res["nextStep"]["additionalInfo"] is String
-              ? jsonDecode(res["nextStep"]["additionalInfo"])
-              : null
-        ));
+                ? jsonDecode(res["nextStep"]["additionalInfo"])
+                : null));
   }
 
   AuthSession _formatSessionResponse(Map<String, dynamic> res) {
