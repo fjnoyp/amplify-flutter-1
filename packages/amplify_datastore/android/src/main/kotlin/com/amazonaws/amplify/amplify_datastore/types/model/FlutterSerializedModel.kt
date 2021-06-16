@@ -16,12 +16,16 @@
 package com.amazonaws.amplify.amplify_datastore.types.model
 
 import com.amplifyframework.core.model.Model
+import com.amplifyframework.core.model.ModelAssociation
+import com.amplifyframework.core.model.ModelSchema
 import com.amplifyframework.core.model.temporal.Temporal
 import com.amplifyframework.datastore.appsync.SerializedModel
 import java.lang.Exception
 
 
 data class FlutterSerializedModel(val serializedModel: SerializedModel) {
+
+    val associations: MutableMap<String, FlutterSerializedModel> = HashMap<String, FlutterSerializedModel>();
 
     private val serializedData: Map<String, Any> = parseSerializedDataMap(serializedModel.serializedData)
 
@@ -32,7 +36,7 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
     fun toMap(): Map<String, Any> {
         return mapOf(
                 "id" to id,
-                "serializedData" to serializedData,
+                "serializedData" to serializedData.plus(associations.mapValues { it.value.serializedData }),
                 "modelName" to modelName)
     }
 
