@@ -30,14 +30,16 @@ import com.amazonaws.amplify.amplify_datastore.types.model.FlutterSubscriptionEv
 import com.amazonaws.amplify.amplify_datastore.types.query.QueryOptionsBuilder
 import com.amazonaws.amplify.amplify_datastore.util.safeCastToList
 import com.amazonaws.amplify.amplify_datastore.util.safeCastToMap
-import com.amplifyframework.AmplifyException
 import com.amplifyframework.core.Amplify
 import com.amplifyframework.core.Consumer
 import com.amplifyframework.core.async.Cancelable
 import com.amplifyframework.core.model.Model
 import com.amplifyframework.core.model.ModelAssociation
+import com.amplifyframework.core.model.PrimaryKey
+import com.amplifyframework.core.model.query.Page
 import com.amplifyframework.core.model.query.QueryOptions
 import com.amplifyframework.core.model.query.Where
+import com.amplifyframework.core.model.query.predicate.QueryField
 import com.amplifyframework.core.model.query.predicate.QueryPredicates
 import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.datastore.DataStoreException
@@ -48,7 +50,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
-import kotlin.coroutines.suspendCoroutine
+import java.util.Objects
 
 /** AmplifyDataStorePlugin */
 class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
@@ -157,8 +159,8 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
 
     @VisibleForTesting
     fun onQuery(flutterResult: Result, request: Map<String, Any>) {
-        var modelName: String
-        var queryOptions: QueryOptions
+        val modelName: String
+        val queryOptions: QueryOptions
         try {
             modelName = request["modelName"] as String
             queryOptions = QueryOptionsBuilder.fromSerializedMap(request)
@@ -199,52 +201,77 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
     }
 
     private fun queryModels(models: MutableList<Model>, results: MutableList<Map<String, Any>>, onQueryResults: () -> Unit) {
+        // if there are no remaining models to find associations for, invoke callback
         if (models.isEmpty()) {
             onQueryResults()
             return
         }
+
         val model = models.removeAt(0)
         val flutterSerializedModel = FlutterSerializedModel(model as SerializedModel)
         val associations = model.modelSchema?.associations?.entries?.toMutableList()
-        queryAssociations(flutterSerializedModel, associations) {
+
+        // query associations of the current model, then move to next model
+        queryAssociations(model, flutterSerializedModel, associations) {
             results.add(flutterSerializedModel.toMap())
             queryModels(models, results, onQueryResults)
         }
 
     }
 
-    private fun queryAssociations(flutterSerializedModel: FlutterSerializedModel, associations: MutableList<MutableMap.MutableEntry<String, ModelAssociation>>?, onQueryResults: () -> Unit) {
+    private fun queryAssociations(model: SerializedModel, flutterSerializedModel: FlutterSerializedModel, associations: MutableList<MutableMap.MutableEntry<String, ModelAssociation>>?, onQueryResults: () -> Unit) {
+        // if there are no associations left, invoke callback
         if (associations == null || associations.isEmpty()) {
             onQueryResults()
             return
         }
+
         val association = associations.removeAt(0)
-        if (association.value.name == "BelongsTo" || association.value.name == "HasOne") {
-            val nestedModelName = association.value.associatedType
-            // TODO: Need to update match
-            val nestedQueryOptions = QueryOptionsBuilder.fromSerializedMap(null)
-            val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
-            plugin.query(
-                    nestedModelName,
-                    nestedQueryOptions,
-                    {
-                        // NOTE: Because the match above is not correct, the model here will not be correct
-                        val model = it.asSequence().toList().first()
-                        val nestedFlutterSerializedModel = FlutterSerializedModel(model as SerializedModel)
-                        val nestedAssociations = model.modelSchema?.associations?.entries?.toMutableList()
-                        val nestedModelKey = association.key
-                        flutterSerializedModel.associations[nestedModelKey] = nestedFlutterSerializedModel
-                        queryAssociations(nestedFlutterSerializedModel, nestedAssociations) {
-                            queryAssociations(flutterSerializedModel, associations, onQueryResults)
-                        }
-                    },
-                    {
-                        throw Exception("Exception fetching nested models")
-                    }
-            )
-        } else {
-            queryAssociations(flutterSerializedModel, associations, onQueryResults)
+
+        // if the association is not belongsTo or hasOne, move to next association
+        if (association.value.name != "BelongsTo" && association.value.name != "HasOne") {
+            queryAssociations(model, flutterSerializedModel, associations, onQueryResults)
+            return
         }
+
+        val nestedModelName = association.value.associatedType
+        val nestedModelKey = association.key
+        val nestedSerializedData = model.serializedData[nestedModelKey];
+
+        // if nestedSerializedData is not a SerializedModel, the data does not exist - move to next association
+        if (nestedSerializedData !is SerializedModel) {
+            queryAssociations(model, flutterSerializedModel, associations, onQueryResults)
+            return
+        }
+
+        val nestedModelId = nestedSerializedData.serializedData["id"].toString();
+        val queryOptions = whereId(nestedModelName, nestedModelId)
+        val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
+        plugin.query(
+                nestedModelName,
+                queryOptions,
+                {
+                    val nestedModel = it.asSequence().toList().first()
+                    val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
+                    val nestedAssociations = nestedModel.modelSchema?.associations?.entries?.toMutableList()
+                    flutterSerializedModel.associations[nestedModelKey] = nestedFlutterSerializedModel
+                    // query nested associations recursively, then query other associations of parent
+                    queryAssociations(nestedModel, nestedFlutterSerializedModel, nestedAssociations) {
+                        queryAssociations(model, flutterSerializedModel, associations, onQueryResults)
+                    }
+                },
+                {
+                    // TODO: How should we handle exceptions fetching nested models?
+                    throw Exception("Exception fetching nested models")
+                }
+        )
+    }
+
+    // this is work around for an issue in amplify-android. See https://github.com/aws-amplify/amplify-android/issues/1268
+    private fun whereId(modelName: String, modelId: String): QueryOptions {
+        val idField = QueryField.field(modelName, PrimaryKey.fieldName())
+        return Where.matches(idField.eq(Objects.requireNonNull(modelId)))
+                .paginated(Page.firstResult())
     }
 
     @VisibleForTesting
