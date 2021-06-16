@@ -27,8 +27,6 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
 
     val associations: MutableMap<String, FlutterSerializedModel> = HashMap<String, FlutterSerializedModel>();
 
-    private val serializedData: Map<String, Any> = parseSerializedDataMap(serializedModel.serializedData)
-
     // ignored fields
     private val id: String = serializedModel.id
     private val modelName: String = parseModelName(serializedModel.modelName) // ModelSchema -> SerializedModel should always have a name
@@ -36,7 +34,7 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
     fun toMap(): Map<String, Any> {
         return mapOf(
                 "id" to id,
-                "serializedData" to serializedData.plus(associations.mapValues { it.value.serializedData }),
+                "serializedData" to parseSerializedDataMap(),
                 "modelName" to modelName)
     }
 
@@ -45,11 +43,11 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
         else modelName!!
     }
 
-    private fun parseSerializedDataMap(serializedData: Map<String, Any>): Map<String, Any> {
+    private fun parseSerializedDataMap(): Map<String, Any> {
 
-        if(serializedData == null) throw Exception("FlutterSerializedModel - no serializedData")
+        if(serializedModel.serializedData == null) throw Exception("FlutterSerializedModel - no serializedData")
 
-        return serializedData.mapValues {
+        return serializedModel.serializedData.mapValues {
             when (val value: Any = it.value) {
                 is Temporal.DateTime -> value.format()
                 is Temporal.Date -> value.format()
@@ -60,6 +58,6 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
                 // It seems we can ignore collection types for now as we aren't returning lists of Models in hasMany relationships
                 else -> value
             }
-        }
+        }.plus(associations.mapValues { it.value.parseSerializedDataMap() })
     }
 }

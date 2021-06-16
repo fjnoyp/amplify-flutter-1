@@ -221,16 +221,22 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
         val association = associations.removeAt(0)
         if (association.value.name == "BelongsTo" || association.value.name == "HasOne") {
             val nestedModelName = association.value.associatedType
+            // TODO: Need to update match
             val nestedQueryOptions = QueryOptionsBuilder.fromSerializedMap(null)
             val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
             plugin.query(
                     nestedModelName,
                     nestedQueryOptions,
                     {
-                        val nestedFlutterSerializedModel = FlutterSerializedModel(it.asSequence().toList().first() as SerializedModel)
+                        // NOTE: Because the match above is not correct, the model here will not be correct
+                        val model = it.asSequence().toList().first()
+                        val nestedFlutterSerializedModel = FlutterSerializedModel(model as SerializedModel)
+                        val nestedAssociations = model.modelSchema?.associations?.entries?.toMutableList()
                         val nestedModelKey = association.key
                         flutterSerializedModel.associations[nestedModelKey] = nestedFlutterSerializedModel
-                        queryAssociations(flutterSerializedModel, associations, onQueryResults)
+                        queryAssociations(nestedFlutterSerializedModel, nestedAssociations) {
+                            queryAssociations(flutterSerializedModel, associations, onQueryResults)
+                        }
                     },
                     {
                         throw Exception("Exception fetching nested models")
