@@ -40,6 +40,7 @@ import com.amplifyframework.core.model.query.Page
 import com.amplifyframework.core.model.query.QueryOptions
 import com.amplifyframework.core.model.query.Where
 import com.amplifyframework.core.model.query.predicate.QueryField
+import com.amplifyframework.core.model.query.predicate.QueryPredicateGroup
 import com.amplifyframework.core.model.query.predicate.QueryPredicates
 import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.datastore.DataStoreException
@@ -51,6 +52,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 import java.util.Objects
+import kotlin.collections.Map.Entry
 
 /** AmplifyDataStorePlugin */
 class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
@@ -179,7 +181,9 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                     try {
                         val results: MutableList<Map<String, Any>> = mutableListOf()
                         val models = it.asSequence().toMutableList()
-                        queryModels(models, results) {
+                        val flutterSerializedModels = models.map { model -> FlutterSerializedModel(model as SerializedModel) }
+                        queryModels(models, flutterSerializedModels) {
+                            results.addAll(flutterSerializedModels.map { it.toMap() })
                             LOG.debug("Number of items received " + results.size)
                             handler.post { flutterResult.success(results) }
                         }
@@ -200,64 +204,82 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
         )
     }
 
-    private fun queryModels(models: MutableList<Model>, results: MutableList<Map<String, Any>>, onQueryResults: () -> Unit) {
-        // if there are no remaining models to find associations for, invoke callback
+    private fun queryModels(models: MutableList<Model>, flutterSerializedModels: List<FlutterSerializedModel>, onQueryResults: () -> Unit) {
+        // if there are no models to find nested data for, invoke callback and return
         if (models.isEmpty()) {
             onQueryResults()
             return
         }
 
-        val model = models.removeAt(0)
-        val flutterSerializedModel = FlutterSerializedModel(model as SerializedModel)
-        val associations = model.modelSchema?.associations?.entries?.toMutableList()
+        // grab associations from the first model
+        // TODO: Confirm all models are guaranteed to have the same associations. If not, this approach is flawed
+        val firstModel = models[0] as SerializedModel
+        val associations = firstModel.modelSchema?.associations?.entries?.toMutableList()
 
-        // query associations of the current model, then move to next model
-        queryAssociations(model, flutterSerializedModel, associations) {
-            results.add(flutterSerializedModel.toMap())
-            queryModels(models, results, onQueryResults)
-        }
-
-    }
-
-    private fun queryAssociations(model: SerializedModel, flutterSerializedModel: FlutterSerializedModel, associations: MutableList<MutableMap.MutableEntry<String, ModelAssociation>>?, onQueryResults: () -> Unit) {
-        // if there are no associations left, invoke callback
+        // if there are no associations, invoke callback and return
         if (associations == null || associations.isEmpty()) {
             onQueryResults()
             return
         }
 
-        val association = associations.removeAt(0)
+        val associationsMap: MutableMap<String, Pair<ModelAssociation, List<String>>> = mutableMapOf()
+        for (association in associations) {
+            if (association.value.name == "BelongsTo" || association.value.name == "HasOne") {
+                val associationIds = getAssociationIds(models, association)
+                associationsMap[association.key] = Pair(association.value, associationIds)
+            }
+        }
 
-        // if the association is not belongsTo or hasOne, move to next association
-        if (association.value.name != "BelongsTo" && association.value.name != "HasOne") {
-            queryAssociations(model, flutterSerializedModel, associations, onQueryResults)
+        //
+        queryAssociations(flutterSerializedModels, associationsMap)
+        {
+            onQueryResults()
+        }
+
+    }
+
+    private fun queryAssociations(flutterSerializedModels: List<FlutterSerializedModel>, associationsMap: MutableMap<String, Pair<ModelAssociation, List<String>>>, onQueryResults: () -> Unit) {
+        // if there are no associations left, invoke callback and return
+        if (associationsMap.isEmpty()) {
+            onQueryResults()
             return
         }
 
-        val nestedModelName = association.value.associatedType
-        val nestedModelKey = association.key
-        val nestedSerializedData = model.serializedData[nestedModelKey];
+        val associationKey = associationsMap.keys.first()
+        val associationPair = associationsMap.remove(associationKey)!!
 
-        // if nestedSerializedData is not a SerializedModel, the data does not exist - move to next association
-        if (nestedSerializedData !is SerializedModel) {
-            queryAssociations(model, flutterSerializedModel, associations, onQueryResults)
+        val association = associationPair.first
+        val associationIds = associationPair.second
+
+        // if there are no association ids, move to next association
+        if (associationIds.isEmpty()) {
+            queryAssociations(flutterSerializedModels, associationsMap, onQueryResults)
             return
         }
-
-        val nestedModelId = nestedSerializedData.serializedData["id"].toString();
-        val queryOptions = whereId(nestedModelName, nestedModelId)
+        val nestedModelName = association.associatedType
+        val queryOptions = whereIds(nestedModelName, associationIds)
         val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
         plugin.query(
                 nestedModelName,
                 queryOptions,
                 {
-                    val nestedModel = it.asSequence().toList().first()
-                    val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
-                    val nestedAssociations = nestedModel.modelSchema?.associations?.entries?.toMutableList()
-                    flutterSerializedModel.associations[nestedModelKey] = nestedFlutterSerializedModel
-                    // query nested associations recursively, then query other associations of parent
-                    queryAssociations(nestedModel, nestedFlutterSerializedModel, nestedAssociations) {
-                        queryAssociations(model, flutterSerializedModel, associations, onQueryResults)
+                    val nestedModelList = it.asSequence().toMutableList()
+                    val nestedFlutterSerializedModels = mutableListOf<FlutterSerializedModel>()
+                    for (flutterSerializedModel in flutterSerializedModels) {
+                        val nestedSerializedModel = flutterSerializedModel.serializedModel.serializedData[associationKey] as SerializedModel
+                        val modelId = nestedSerializedModel.serializedData["id"].toString();
+                        if (nestedModelList.isNotEmpty()) {
+                            val nestedModel = nestedModelList.first { nestedModel -> nestedModel.id == modelId }
+                            val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
+                            nestedFlutterSerializedModels.add(nestedFlutterSerializedModel)
+                            flutterSerializedModel.associations[associationKey] = nestedFlutterSerializedModel
+                        } else {
+                            // TODO: How to handle empty lists
+                            LOG.error("Empty nestedModelList.")
+                        }
+                    }
+                    queryModels(nestedModelList, nestedFlutterSerializedModels) {
+                        queryAssociations(flutterSerializedModels, associationsMap, onQueryResults)
                     }
                 },
                 {
@@ -267,11 +289,34 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
         )
     }
 
-    // this is work around for an issue in amplify-android. See https://github.com/aws-amplify/amplify-android/issues/1268
-    private fun whereId(modelName: String, modelId: String): QueryOptions {
+    private fun getAssociationIds(models: MutableList<Model>, association: MutableMap.MutableEntry<String, ModelAssociation>): List<String> {
+        val results: MutableList<String> = mutableListOf()
+        val nestedModelKey = association.key
+        for (model in models) {
+            val nestedSerializedData = (model as SerializedModel).serializedData[nestedModelKey]
+            // if nestedSerializedData is not a SerializedModel, the data does not exist and should be skipped
+            // this is most likely the result of a non-required relationship
+            if (nestedSerializedData is SerializedModel) {
+                val nestedModelId = nestedSerializedData.serializedData["id"].toString()
+                results.add(nestedModelId)
+            }
+        }
+        return results
+    }
+
+    // TODO: Should this be paginated?
+    private fun whereIds(modelName: String, modelIds: List<String>): QueryOptions {
+        val distinctModelIds = modelIds.toSet().toList();
         val idField = QueryField.field(modelName, PrimaryKey.fieldName())
-        return Where.matches(idField.eq(Objects.requireNonNull(modelId)))
-                .paginated(Page.firstResult())
+        if (distinctModelIds.size == 1) {
+            return Where.matches(idField.eq(distinctModelIds[0]))
+        }
+        var match: QueryPredicateGroup = idField.eq(distinctModelIds[0]).or(idField.eq(distinctModelIds[1]))
+        // TODO: remove limit and handle batching, 1000+ gives error
+        for (i in 2 until minOf(distinctModelIds.size, 990)) {
+            match = match.or(idField.eq(distinctModelIds[i]))
+        }
+        return Where.matches(match)
     }
 
     @VisibleForTesting
