@@ -274,19 +274,14 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                     for (flutterSerializedModel in flutterSerializedModels) {
                         val nestedSerializedModel = flutterSerializedModel.serializedModel.serializedData[associationKey] as SerializedModel
                         val modelId = nestedSerializedModel.serializedData["id"].toString();
-                        if (nestedModelHashMap.isNotEmpty()) {
-                            val nestedModel = nestedModelHashMap[modelId]
-                            if (nestedModel != null) {
-                                val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
-                                nestedFlutterSerializedModels.add(nestedFlutterSerializedModel)
-                                flutterSerializedModel.associations[associationKey] = nestedFlutterSerializedModel
-                            } else {
-                                // TODO: How to handle when the data is not found in the DB
-                                LOG.error("Nested model $nestedModelName with ID $modelId was not in DB")
-                            }
+                        val nestedModel = nestedModelHashMap[modelId]
+                        if (nestedModel != null) {
+                            val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
+                            nestedFlutterSerializedModels.add(nestedFlutterSerializedModel)
+                            flutterSerializedModel.associations[associationKey] = nestedFlutterSerializedModel
                         } else {
-                            // TODO: How to handle when the data is not found in the DB
-                            LOG.error("Empty nestedModelList.")
+                            // TODO: How to handle when the data is not found in the local DB (data not synced)
+                            LOG.error("Nested model $nestedModelName with ID $modelId was not in DB")
                         }
                     }
                     // query nested models, then query the remaining associations of the current set of models
