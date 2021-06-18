@@ -180,7 +180,7 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                 {
                     try {
                         val flutterSerializedModels = it.asSequence().toList().map { model -> FlutterSerializedModel(model as SerializedModel) }
-                        queryModels(
+                        queryNestedModels(
                                 flutterSerializedModels,
                                 { models ->
                                     val results = models.map { model -> model.toMap() }
@@ -212,8 +212,8 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
         )
     }
 
-    // accesses association data for a given set of models, and then queries those associations
-    private fun queryModels(
+    // accesses association data for a given set of models, and then queries the associated nested models
+    private fun queryNestedModels(
             flutterSerializedModels: List<FlutterSerializedModel>,
             onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit,
             onQueryFailure: (e: DataStoreException) -> Unit
@@ -242,13 +242,13 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                         { association -> Pair(association.value, getAssociatedModelIds(flutterSerializedModels, association)) }
                 )
 
-        // query the associations for a single model
-        queryAssociations(flutterSerializedModels, associationsMap, onQueryResults, onQueryFailure )
+        // query the nested models for a list of models with the given associations data
+        queryAssociatedModels(flutterSerializedModels, associationsMap, onQueryResults, onQueryFailure )
 
     }
 
     // recursively queries the nested data for the given associations of a set of models
-    private fun queryAssociations(
+    private fun queryAssociatedModels(
             flutterSerializedModels: List<FlutterSerializedModel>,
             associationsMap: Map<String, Pair<ModelAssociation, List<String>>>,
             onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit,
@@ -269,7 +269,7 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
 
         // if there are no association ids, move to next association
         if (associationIds.isEmpty()) {
-            queryAssociations(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure)
+            queryAssociatedModels(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure)
             return
         }
         val nestedModelName = association.associatedType
@@ -294,9 +294,9 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                         }
                     }
                     // query nested models, then query the remaining associations of the current set of models
-                    queryModels(
+                    queryNestedModels(
                             nestedFlutterSerializedModels,
-                            { queryAssociations(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure) },
+                            { queryAssociatedModels(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure) },
                             onQueryFailure
                     )
                 },
