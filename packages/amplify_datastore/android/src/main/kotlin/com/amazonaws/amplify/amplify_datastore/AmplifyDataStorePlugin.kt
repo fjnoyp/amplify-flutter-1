@@ -180,11 +180,21 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                 {
                     try {
                         val flutterSerializedModels = it.asSequence().toList().map { model -> FlutterSerializedModel(model as SerializedModel) }
-                        queryModels(flutterSerializedModels) { models ->
-                            val results = models.map { model -> model.toMap() }
-                            LOG.debug("Number of items received " + results.size)
-                            handler.post { flutterResult.success(results) }
-                        }
+                        queryModels(
+                                flutterSerializedModels,
+                                { models ->
+                                    val results = models.map { model -> model.toMap() }
+                                    LOG.debug("Number of items received " + results.size)
+                                    handler.post { flutterResult.success(results) }
+                                },
+                                { e ->
+                                    LOG.error("Nested Query operation failed.", e)
+                                    handler.post {
+                                        postExceptionToFlutterChannel(flutterResult, "DataStoreException",
+                                                createSerializedError(e))
+                                    }
+                                }
+                        )
                     } catch (e: Exception) {
                         handler.post {
                             postExceptionToFlutterChannel(flutterResult, "DataStoreException",
@@ -192,11 +202,11 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                         }
                     }
                 },
-                {
-                    LOG.error("Query operation failed.", it)
+                { e ->
+                    LOG.error("Query operation failed.", e)
                     handler.post {
                         postExceptionToFlutterChannel(flutterResult, "DataStoreException",
-                                createSerializedError(it))
+                                createSerializedError(e))
                     }
                 }
         )
@@ -205,7 +215,8 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
     // accesses association data for a given set of models, and then queries those associations
     private fun queryModels(
             flutterSerializedModels: List<FlutterSerializedModel>,
-            onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit
+            onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit,
+            onQueryFailure: (e: DataStoreException) -> Unit
     ) {
         // if there are no models to find nested data for, invoke callback w/ the original list and return
         if (flutterSerializedModels.isEmpty()) {
@@ -231,10 +242,8 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                         { association -> Pair(association.value, getAssociatedModelIds(flutterSerializedModels, association)) }
                 )
 
-
-
         // query the associations for a single model
-        queryAssociations(flutterSerializedModels, associationsMap) { onQueryResults(it) }
+        queryAssociations(flutterSerializedModels, associationsMap, onQueryResults, onQueryFailure )
 
     }
 
@@ -242,7 +251,8 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
     private fun queryAssociations(
             flutterSerializedModels: List<FlutterSerializedModel>,
             associationsMap: Map<String, Pair<ModelAssociation, List<String>>>,
-            onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit
+            onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit,
+            onQueryFailure: (e: DataStoreException) -> Unit
     ) {
         // if there are no associations left, invoke callback and return
         if (associationsMap.isEmpty()) {
@@ -259,7 +269,7 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
 
         // if there are no association ids, move to next association
         if (associationIds.isEmpty()) {
-            queryAssociations(flutterSerializedModels, updatedAssociationsMap, onQueryResults)
+            queryAssociations(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure)
             return
         }
         val nestedModelName = association.associatedType
@@ -284,13 +294,14 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                         }
                     }
                     // query nested models, then query the remaining associations of the current set of models
-                    queryModels(nestedFlutterSerializedModels) {
-                        queryAssociations(flutterSerializedModels, updatedAssociationsMap, onQueryResults)
-                    }
+                    queryModels(
+                            nestedFlutterSerializedModels,
+                            { queryAssociations(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure) },
+                            onQueryFailure
+                    )
                 },
                 {
-                    // TODO: How to handle exceptions fetching nested models
-                    throw Exception("Exception fetching nested models")
+                    onQueryFailure(it)
                 }
         )
     }
@@ -300,7 +311,7 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
             modelName: String,
             queryOptionsList: List<QueryOptions>,
             onQueryResults: (result: List<Model>) -> Unit,
-            onFailure: (e: DataStoreException) -> Unit,
+            onQueryFailure: (e: DataStoreException) -> Unit,
             previousResults: List<Model> = listOf()
     ) {
         val results = previousResults.toMutableList()
@@ -316,9 +327,9 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                 queryOptions,
                 {
                     results.addAll(it.asSequence())
-                    batchedQuery(modelName, mutableQueryOptionsList, onQueryResults, onFailure, results)
+                    batchedQuery(modelName, mutableQueryOptionsList, onQueryResults, onQueryFailure, results)
                 },
-                onFailure
+                onQueryFailure
         )
 
     }
