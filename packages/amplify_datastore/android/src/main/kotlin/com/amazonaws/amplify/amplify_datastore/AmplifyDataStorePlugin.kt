@@ -268,12 +268,11 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                 nestedModelName,
                 queryOptions,
                 {
-                    val nestedModelList = it.toMutableList()
-                    val nestedModelHashMap = nestedModelList.associateBy({ nestedModel -> nestedModel.id }, { nestedModel -> nestedModel })
+                    val nestedModelHashMap = it.associateBy({ nestedModel -> nestedModel.id }, { nestedModel -> nestedModel })
                     val nestedFlutterSerializedModels = mutableListOf<FlutterSerializedModel>()
                     for (flutterSerializedModel in flutterSerializedModels) {
                         val nestedSerializedModel = flutterSerializedModel.serializedModel.serializedData[associationKey] as SerializedModel
-                        val modelId = nestedSerializedModel.serializedData["id"].toString();
+                        val modelId = nestedSerializedModel.serializedData["id"].toString()
                         val nestedModel = nestedModelHashMap[modelId]
                         if (nestedModel != null) {
                             val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
@@ -302,7 +301,7 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
             queryOptionsList: List<QueryOptions>,
             onQueryResults: (result: List<Model>) -> Unit,
             onFailure: (e: DataStoreException) -> Unit,
-            previousResults: List<Model> = listOf<Model>()
+            previousResults: List<Model> = listOf()
     ) {
         val results = previousResults.toMutableList()
         if (queryOptionsList.isEmpty()) {
