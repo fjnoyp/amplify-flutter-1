@@ -179,11 +179,10 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                 queryOptions,
                 {
                     try {
-                        val results: MutableList<Map<String, Any>> = mutableListOf()
                         val models = it.asSequence().toMutableList()
                         val flutterSerializedModels = models.map { model -> FlutterSerializedModel(model as SerializedModel) }
                         queryModels(models, flutterSerializedModels) {
-                            results.addAll(flutterSerializedModels.map { it.toMap() })
+                            val results = flutterSerializedModels.map { model -> model.toMap() }
                             LOG.debug("Number of items received " + results.size)
                             handler.post { flutterResult.success(results) }
                         }
@@ -204,7 +203,11 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
         )
     }
 
-    private fun queryModels(models: MutableList<Model>, flutterSerializedModels: List<FlutterSerializedModel>, onQueryResults: () -> Unit) {
+    private fun queryModels(
+            models: MutableList<Model>,
+            flutterSerializedModels: List<FlutterSerializedModel>,
+            onQueryResults: () -> Unit
+    ) {
         // if there are no models to find nested data for, invoke callback and return
         if (models.isEmpty()) {
             onQueryResults()
@@ -230,7 +233,7 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
             }
         }
 
-        //
+        // query the associations for a single model
         queryAssociations(flutterSerializedModels, associationsMap)
         {
             onQueryResults()
@@ -238,7 +241,11 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
 
     }
 
-    private fun queryAssociations(flutterSerializedModels: List<FlutterSerializedModel>, associationsMap: MutableMap<String, Pair<ModelAssociation, List<String>>>, onQueryResults: () -> Unit) {
+    private fun queryAssociations(
+            flutterSerializedModels: List<FlutterSerializedModel>,
+            associationsMap: MutableMap<String, Pair<ModelAssociation, List<String>>>,
+            onQueryResults: () -> Unit
+    ) {
         // if there are no associations left, invoke callback and return
         if (associationsMap.isEmpty()) {
             onQueryResults()
@@ -258,26 +265,32 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
         }
         val nestedModelName = association.associatedType
         val queryOptions = whereIds(nestedModelName, associationIds)
-        val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
-        plugin.query(
+        batchedQuery(
                 nestedModelName,
                 queryOptions,
                 {
-                    val nestedModelList = it.asSequence().toMutableList()
+                    val nestedModelList = it.toMutableList()
+                    val nestedModelHashMap = nestedModelList.associateBy({ nestedModel -> nestedModel.id }, { nestedModel -> nestedModel })
                     val nestedFlutterSerializedModels = mutableListOf<FlutterSerializedModel>()
                     for (flutterSerializedModel in flutterSerializedModels) {
                         val nestedSerializedModel = flutterSerializedModel.serializedModel.serializedData[associationKey] as SerializedModel
                         val modelId = nestedSerializedModel.serializedData["id"].toString();
-                        if (nestedModelList.isNotEmpty()) {
-                            val nestedModel = nestedModelList.first { nestedModel -> nestedModel.id == modelId }
-                            val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
-                            nestedFlutterSerializedModels.add(nestedFlutterSerializedModel)
-                            flutterSerializedModel.associations[associationKey] = nestedFlutterSerializedModel
+                        if (nestedModelHashMap.isNotEmpty()) {
+                            val nestedModel = nestedModelHashMap[modelId]
+                            if (nestedModel != null) {
+                                val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
+                                nestedFlutterSerializedModels.add(nestedFlutterSerializedModel)
+                                flutterSerializedModel.associations[associationKey] = nestedFlutterSerializedModel
+                            } else {
+                                // TODO: How to handle when the data is not found in the DB?
+                                LOG.error("Nested model $nestedModelName with ID $modelId was not in DB")
+                            }
                         } else {
-                            // TODO: How to handle empty lists
+                            // TODO: How to handle empty lists? Is this even a valid case?
                             LOG.error("Empty nestedModelList.")
                         }
                     }
+                    // query nested models, then query the remaining associations of the current model
                     queryModels(nestedModelList, nestedFlutterSerializedModels) {
                         queryAssociations(flutterSerializedModels, associationsMap, onQueryResults)
                     }
@@ -287,6 +300,34 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                     throw Exception("Exception fetching nested models")
                 }
         )
+    }
+
+    // performs a query for each set of QueryOptions and combines the results as if it were a single query
+    private fun batchedQuery(
+            modelName: String,
+            queryOptionsList: List<QueryOptions>,
+            onQueryResults: (result: List<Model>) -> Unit,
+            onFailure: (e: DataStoreException) -> Unit,
+            previousResults: List<Model> = listOf<Model>()
+    ) {
+        val results = previousResults.toMutableList()
+        if (queryOptionsList.isEmpty()) {
+            onQueryResults(results)
+            return
+        }
+        val mutableQueryOptionsList = queryOptionsList.toMutableList()
+        val queryOptions = mutableQueryOptionsList.removeAt(0)
+        val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
+        plugin.query(
+                modelName,
+                queryOptions,
+                {
+                    results.addAll(it.asSequence())
+                    batchedQuery(modelName, mutableQueryOptionsList, onQueryResults, onFailure, results)
+                },
+                onFailure
+        )
+
     }
 
     private fun getAssociationIds(models: MutableList<Model>, association: MutableMap.MutableEntry<String, ModelAssociation>): List<String> {
@@ -304,19 +345,23 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
         return results
     }
 
-    // TODO: Should this be paginated?
-    private fun whereIds(modelName: String, modelIds: List<String>): QueryOptions {
+    private fun whereIds(modelName: String, modelIds: List<String>): List<QueryOptions> {
         val distinctModelIds = modelIds.toSet().toList();
-        val idField = QueryField.field(modelName, PrimaryKey.fieldName())
-        if (distinctModelIds.size == 1) {
-            return Where.matches(idField.eq(distinctModelIds[0]))
+        val chunkedModelsIds = distinctModelIds.chunked(990)
+        return chunkedModelsIds.map { modelIdsChunk ->
+            val idField = QueryField.field(modelName, PrimaryKey.fieldName())
+            if (modelIdsChunk.size == 1) {
+                Where.matches(idField.eq(modelIdsChunk[0]))
+            } else {
+                var match: QueryPredicateGroup = idField.eq(modelIdsChunk[0]).or(idField.eq(modelIdsChunk[1]))
+                // TODO: remove limit and handle batching, 1000+ gives error
+                for (i in 2 until minOf(modelIdsChunk.size, 990)) {
+                    match = match.or(idField.eq(modelIdsChunk[i]))
+                }
+                Where.matches(match)
+            }
         }
-        var match: QueryPredicateGroup = idField.eq(distinctModelIds[0]).or(idField.eq(distinctModelIds[1]))
-        // TODO: remove limit and handle batching, 1000+ gives error
-        for (i in 2 until minOf(distinctModelIds.size, 990)) {
-            match = match.or(idField.eq(distinctModelIds[i]))
-        }
-        return Where.matches(match)
+
     }
 
     @VisibleForTesting
