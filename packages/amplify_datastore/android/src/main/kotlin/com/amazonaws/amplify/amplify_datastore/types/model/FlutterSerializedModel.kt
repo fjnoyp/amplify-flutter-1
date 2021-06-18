@@ -25,7 +25,7 @@ import java.lang.Exception
 
 data class FlutterSerializedModel(val serializedModel: SerializedModel) {
 
-    val associations: MutableMap<String, FlutterSerializedModel> = HashMap<String, FlutterSerializedModel>();
+    val associations: MutableMap<String, FlutterSerializedModel> = HashMap();
 
     // ignored fields
     private val id: String = serializedModel.id
@@ -58,6 +58,6 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
                 // It seems we can ignore collection types for now as we aren't returning lists of Models in hasMany relationships
                 else -> value
             }
-        }.plus(associations.mapValues { it.value.parseSerializedDataMap() })
+        }.plus(associations.mapValues { it.value.toMap() })
     }
 }
