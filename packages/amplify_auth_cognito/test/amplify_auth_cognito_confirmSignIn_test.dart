@@ -21,15 +21,15 @@ extension IsEqual on SignInResult {
   // This method only checks the length of the additionalInfo field, and the values of all other fields
   bool isMostlyEqual(SignInResult comparator) {
     return comparator.isSignedIn == isSignedIn &&
-        comparator.nextStep.signInStep == nextStep.signInStep &&
-        comparator.nextStep.additionalInfo.length ==
-            nextStep.additionalInfo.length &&
-        comparator.nextStep.codeDeliveryDetails.destination ==
-            nextStep.codeDeliveryDetails.destination &&
-        comparator.nextStep.codeDeliveryDetails.attributeName ==
-            nextStep.codeDeliveryDetails.attributeName &&
-        comparator.nextStep.codeDeliveryDetails.deliveryMedium ==
-            nextStep.codeDeliveryDetails.deliveryMedium;
+        comparator.nextStep!.signInStep == nextStep!.signInStep &&
+        comparator.nextStep!.additionalInfo?.length ==
+            nextStep!.additionalInfo?.length &&
+        comparator.nextStep!.codeDeliveryDetails!.destination ==
+            nextStep!.codeDeliveryDetails!.destination &&
+        comparator.nextStep!.codeDeliveryDetails!.attributeName ==
+            nextStep!.codeDeliveryDetails!.attributeName &&
+        comparator.nextStep!.codeDeliveryDetails!.deliveryMedium ==
+            nextStep!.codeDeliveryDetails!.deliveryMedium;
   }
 }
 
@@ -104,21 +104,20 @@ void main() {
         assert(methodCall.arguments["data"]["confirmationCode"] is String);
         return throw PlatformException(
             code: "UnknownException",
-            details: Map.from({
-              "message": "I am an exception"
-            }));
+            details: Map.from({"message": "I am an exception"}));
       } else {
         return true;
       }
     });
-    AuthException err;
+    late AuthException err;
     try {
       await auth.confirmSignIn(
           request: ConfirmSignInRequest(confirmationValue: "iAmNotLegit"));
-    } catch (e) {
-      err = e;
+    } on AuthException catch (e) {
+      expect(e.message, "I am an exception");
+      expect(e, isInstanceOf<AuthException>());
+      return;
     }
-    expect(err.message, "I am an exception");
-    expect(err, isInstanceOf<AuthException>());
+    fail("No AuthException Thrown");
   });
 }
