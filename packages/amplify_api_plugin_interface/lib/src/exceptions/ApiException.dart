@@ -22,9 +22,10 @@ class ApiException extends AmplifyException {
 
   /// Named constructor
   const ApiException(String message,
-      {String? recoverySuggestion, String? underlyingException, int? httpStatusCode})
-      :
-        super(message,
+      {String? recoverySuggestion,
+      String? underlyingException,
+      int? httpStatusCode})
+      : super(message,
             recoverySuggestion: recoverySuggestion,
             underlyingException: underlyingException);
 
