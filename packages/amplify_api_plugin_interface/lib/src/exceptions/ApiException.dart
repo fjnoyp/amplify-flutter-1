@@ -24,14 +24,14 @@ class ApiException extends AmplifyException {
   const ApiException(String message,
       {String? recoverySuggestion,
       String? underlyingException,
-      int? httpStatusCode})
+      this.httpStatusCode})
       : super(message,
             recoverySuggestion: recoverySuggestion,
             underlyingException: underlyingException);
 
   /// Constructor for down casting an AmplifyException to this exception
   ApiException._private(
-      AmplifyException exception, int httpStatusCodeFromException)
+      AmplifyException exception, int? httpStatusCodeFromException)
       : httpStatusCode = httpStatusCodeFromException,
         super(exception.message,
             recoverySuggestion: exception.recoverySuggestion,

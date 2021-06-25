@@ -37,9 +37,9 @@ class AmplifyDataStore extends DataStorePluginInterface {
   /// [syncPageSize]: page size to sync
   AmplifyDataStore(
       {required ModelProviderInterface modelProvider,
-      int syncInterval,
-      int syncMaxRecords,
-      int syncPageSize})
+      int? syncInterval,
+      int? syncMaxRecords,
+      int? syncPageSize})
       : super(
             token: _token,
             modelProvider: modelProvider,
@@ -80,13 +80,13 @@ class AmplifyDataStore extends DataStorePluginInterface {
 
   @override
   Future<void> configureDataStore(
-      {ModelProviderInterface modelProvider,
-      int syncInterval,
-      int syncMaxRecords,
-      int syncPageSize}) async {
+      {ModelProviderInterface? modelProvider,
+      int? syncInterval,
+      int? syncMaxRecords,
+      int? syncPageSize}) async {
     ModelProviderInterface provider =
         modelProvider == null ? this.modelProvider : modelProvider;
-    if (provider == null || provider.modelSchemas.isEmpty) {
+    if (provider.modelSchemas.isEmpty) {
       throw DataStoreException('No modelProvider or modelSchemas found',
           recoverySuggestion:
               'Pass in a modelProvider instance while instantiating DataStorePlugin');

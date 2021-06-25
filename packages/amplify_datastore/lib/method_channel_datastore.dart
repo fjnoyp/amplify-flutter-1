@@ -41,8 +41,9 @@ class AmplifyDataStoreMethodChannel extends AmplifyDataStore {
     try {
       return await _channel
           .invokeMethod('configureDataStore', <String, dynamic>{
-        'modelSchemas':
-            modelProvider.modelSchemas.map((schema) => schema.toMap()).toList(),
+        'modelSchemas': modelProvider!.modelSchemas
+            .map((schema) => schema.toMap())
+            .toList(),
         'modelProviderVersion': modelProvider.version
       });
     } on PlatformException catch (e) {
@@ -62,15 +63,16 @@ class AmplifyDataStoreMethodChannel extends AmplifyDataStore {
   /// called.
   @override
   Future<void> configureDataStore(
-      {ModelProviderInterface modelProvider,
-      int syncInterval,
-      int syncMaxRecords,
-      int syncPageSize}) async {
+      {ModelProviderInterface? modelProvider,
+      int? syncInterval,
+      int? syncMaxRecords,
+      int? syncPageSize}) async {
     try {
       return await _channel
           .invokeMethod('configureDataStore', <String, dynamic>{
-        'modelSchemas':
-            modelProvider.modelSchemas.map((schema) => schema.toMap()).toList(),
+        'modelSchemas': modelProvider!.modelSchemas
+            .map((schema) => schema.toMap())
+            .toList(),
         'modelProviderVersion': modelProvider.version,
         'syncInterval': syncInterval,
         'syncMaxRecords': syncMaxRecords,
@@ -93,7 +95,7 @@ class AmplifyDataStoreMethodChannel extends AmplifyDataStore {
   /// and is invoked as the last step of Amplify.configure(). This must be
   /// called before any observe() method is called.
   @override
-  Future<void> configure({String configuration}) async {
+  Future<void> configure({String? configuration}) async {
     return _channel.invokeMethod('setUpObserve', {});
   }
 

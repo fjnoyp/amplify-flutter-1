@@ -44,16 +44,16 @@ export 'src/publicTypes.dart';
 
 abstract class DataStorePluginInterface extends AmplifyPluginInterface {
   /// modelProvider
-  final late ModelProviderInterface modelProvider;
+  late final ModelProviderInterface modelProvider;
 
   /// Datastore sync interval (in seconds)
-  final int? syncInterval;
+  late final int? syncInterval;
 
   /// Datastore max number of records to sync
-  final int? syncMaxRecords;
+  late final int? syncMaxRecords;
 
   /// Datastore page size to sync
-  final int? syncPageSize;
+  late final int? syncPageSize;
 
   /// Constructs an AmplifyPlatform.
   DataStorePluginInterface(
@@ -90,10 +90,10 @@ abstract class DataStorePluginInterface extends AmplifyPluginInterface {
   ///
   /// [syncPageSize]: page size to sync
   Future<void> configureDataStore(
-      {@required ModelProviderInterface modelProvider,
-      int syncInterval,
-      int syncMaxRecords,
-      int syncPageSize}) {
+      {required ModelProviderInterface modelProvider,
+      int? syncInterval,
+      int? syncMaxRecords,
+      int? syncPageSize}) {
     throw UnimplementedError('configureDataStore() has not been implemented.');
   }
 
