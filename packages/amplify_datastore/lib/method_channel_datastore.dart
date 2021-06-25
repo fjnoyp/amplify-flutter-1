@@ -23,16 +23,21 @@ const MethodChannel _channel = MethodChannel('com.amazonaws.amplify/datastore');
 
 /// An implementation of [AmplifyDataStore] that uses method channels.
 class AmplifyDataStoreMethodChannel extends AmplifyDataStore {
-  var _allModelsStreamFromMethodChannel = null;
+  dynamic _allModelsStreamFromMethodChannel = null;
+
+  /// Internal use constructor
+  AmplifyDataStoreMethodChannel() : super.tokenOnly();
 
   /// This method adds model schemas which is necessary to instantiate native plugins
   /// This is needed before the Amplify.configure() can be called, since the native
   /// plugins are needed to be added before that. As this function is marked for
   /// deprecation, it actually now invokes configureDataStore internally.
+  /// NOTE: modelProvider is nullable because the parent AmplifyDataStore class
+  /// provides a default value
   @deprecated
   @override
   Future<void> configureModelProvider(
-      {ModelProviderInterface modelProvider}) async {
+      {ModelProviderInterface? modelProvider}) async {
     try {
       return await _channel
           .invokeMethod('configureDataStore', <String, dynamic>{
@@ -94,19 +99,20 @@ class AmplifyDataStoreMethodChannel extends AmplifyDataStore {
 
   @override
   Future<List<T>> query<T extends Model>(ModelType<T> modelType,
-      {QueryPredicate where,
-      QueryPagination pagination,
-      List<QuerySortBy> sortBy}) async {
+      {QueryPredicate? where,
+      QueryPagination? pagination,
+      List<QuerySortBy>? sortBy}) async {
     try {
-      final List<Map<dynamic, dynamic>> serializedResults =
-          await _channel.invokeListMethod('query', <String, dynamic>{
+      final List<Map<dynamic, dynamic>>? serializedResults =
+          await (_channel.invokeListMethod('query', <String, dynamic>{
         'modelName': modelType.modelName(),
         'queryPredicate': where?.serializeAsMap(),
         'queryPagination': pagination?.serializeAsMap(),
-        'querySort':
-            sortBy?.map((element) => element?.serializeAsMap())?.toList()
-      });
-
+        'querySort': sortBy?.map((element) => element.serializeAsMap()).toList()
+      }));
+      if (serializedResults == null)
+        throw AmplifyException(
+            AmplifyExceptionMessages.nullReturnedFromMethodChannel);
       return serializedResults
           .map((serializedResult) => modelType.fromJson(
               new Map<String, dynamic>.from(

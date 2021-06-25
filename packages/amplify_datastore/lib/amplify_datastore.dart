@@ -36,7 +36,7 @@ class AmplifyDataStore extends DataStorePluginInterface {
   ///
   /// [syncPageSize]: page size to sync
   AmplifyDataStore(
-      {@required ModelProviderInterface modelProvider,
+      {required ModelProviderInterface modelProvider,
       int syncInterval,
       int syncMaxRecords,
       int syncPageSize})
@@ -47,13 +47,16 @@ class AmplifyDataStore extends DataStorePluginInterface {
             syncMaxRecords: syncMaxRecords,
             syncPageSize: syncPageSize);
 
+  /// Internal use constructor
+  @protected
+  AmplifyDataStore.tokenOnly() : super.tokenOnly(token: _token);
+
   static AmplifyDataStore _instance = AmplifyDataStoreMethodChannel();
   static DataStoreStreamController streamWrapper = DataStoreStreamController();
-  ModelProviderInterface models;
 
   static set instance(DataStorePluginInterface instance) {
     PlatformInterface.verifyToken(instance, _token);
-    _instance = instance;
+    _instance = instance as AmplifyDataStore;
   }
 
   StreamController get streamController {
@@ -63,10 +66,10 @@ class AmplifyDataStore extends DataStorePluginInterface {
   @deprecated
   @override
   Future<void> configureModelProvider(
-      {ModelProviderInterface modelProvider}) async {
+      {ModelProviderInterface? modelProvider}) async {
     ModelProviderInterface provider =
         modelProvider == null ? this.modelProvider : modelProvider;
-    if (provider == null || provider.modelSchemas.isEmpty) {
+    if (provider.modelSchemas.isEmpty) {
       throw DataStoreException('No modelProvider or modelSchemas found',
           recoverySuggestion:
               'Pass in a modelProvider instance while instantiating DataStorePlugin');
@@ -97,15 +100,15 @@ class AmplifyDataStore extends DataStorePluginInterface {
   }
 
   @override
-  Future<void> configure({String configuration}) async {
+  Future<void> configure({String? configuration}) async {
     return _instance.configure(configuration: configuration);
   }
 
   @override
   Future<List<T>> query<T extends Model>(ModelType<T> modelType,
-      {QueryPredicate where,
-      QueryPagination pagination,
-      List<QuerySortBy> sortBy}) async {
+      {QueryPredicate? where,
+      QueryPagination? pagination,
+      List<QuerySortBy>? sortBy}) async {
     return _instance.query(modelType,
         where: where, pagination: pagination, sortBy: sortBy);
   }

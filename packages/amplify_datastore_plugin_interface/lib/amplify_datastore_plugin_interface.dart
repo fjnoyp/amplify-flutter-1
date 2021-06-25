@@ -19,6 +19,7 @@ import 'dart:async';
 
 import 'package:amplify_datastore_plugin_interface/src/types/models/model_provider.dart';
 import 'package:amplify_core/types/index.dart';
+import 'package:meta/meta.dart';
 
 import 'src/types/models/model.dart';
 import 'src/types/query/query_field.dart';
@@ -43,16 +44,16 @@ export 'src/publicTypes.dart';
 
 abstract class DataStorePluginInterface extends AmplifyPluginInterface {
   /// modelProvider
-  final ModelProviderInterface modelProvider;
+  final late ModelProviderInterface modelProvider;
 
   /// Datastore sync interval (in seconds)
-  final int syncInterval;
+  final int? syncInterval;
 
   /// Datastore max number of records to sync
-  final int syncMaxRecords;
+  final int? syncMaxRecords;
 
   /// Datastore page size to sync
-  final int syncPageSize;
+  final int? syncPageSize;
 
   /// Constructs an AmplifyPlatform.
   DataStorePluginInterface(
@@ -61,6 +62,11 @@ abstract class DataStorePluginInterface extends AmplifyPluginInterface {
       this.syncInterval,
       this.syncMaxRecords,
       this.syncPageSize})
+      : super(token: token);
+
+  /// Internal use constructor
+  @protected
+  DataStorePluginInterface.tokenOnly({required Object token})
       : super(token: token);
 
   StreamController get streamController {
