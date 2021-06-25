@@ -30,12 +30,17 @@ import com.amazonaws.amplify.amplify_datastore.types.model.FlutterSubscriptionEv
 import com.amazonaws.amplify.amplify_datastore.types.query.QueryOptionsBuilder
 import com.amazonaws.amplify.amplify_datastore.util.safeCastToList
 import com.amazonaws.amplify.amplify_datastore.util.safeCastToMap
-import com.amplifyframework.AmplifyException
 import com.amplifyframework.core.Amplify
 import com.amplifyframework.core.Consumer
 import com.amplifyframework.core.async.Cancelable
 import com.amplifyframework.core.model.Model
+import com.amplifyframework.core.model.ModelAssociation
+import com.amplifyframework.core.model.PrimaryKey
+import com.amplifyframework.core.model.query.Page
 import com.amplifyframework.core.model.query.QueryOptions
+import com.amplifyframework.core.model.query.Where
+import com.amplifyframework.core.model.query.predicate.QueryField
+import com.amplifyframework.core.model.query.predicate.QueryPredicateGroup
 import com.amplifyframework.core.model.query.predicate.QueryPredicates
 import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.datastore.DataStoreException
@@ -46,6 +51,8 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import java.util.Objects
+import kotlin.collections.Map.Entry
 
 /** AmplifyDataStorePlugin */
 class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
@@ -154,8 +161,8 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
 
     @VisibleForTesting
     fun onQuery(flutterResult: Result, request: Map<String, Any>) {
-        var modelName: String
-        var queryOptions: QueryOptions
+        val modelName: String
+        val queryOptions: QueryOptions
         try {
             modelName = request["modelName"] as String
             queryOptions = QueryOptionsBuilder.fromSerializedMap(request)
@@ -166,20 +173,28 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
             }
             return
         }
-
         val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
         plugin.query(
                 modelName,
                 queryOptions,
                 {
                     try {
-                        val results: List<Map<String, Any>> =
-                                it.asSequence().toList().map { model: Model? ->
-                                    FlutterSerializedModel(model as SerializedModel).toMap()
+                        val flutterSerializedModels = it.asSequence().toList().map { model -> FlutterSerializedModel(model as SerializedModel) }
+                        queryNestedModels(
+                                flutterSerializedModels,
+                                { models ->
+                                    val results = models.map { model -> model.toMap() }
+                                    LOG.debug("Number of items received " + results.size)
+                                    handler.post { flutterResult.success(results) }
+                                },
+                                { e ->
+                                    LOG.error("Nested Query operation failed.", e)
+                                    handler.post {
+                                        postExceptionToFlutterChannel(flutterResult, "DataStoreException",
+                                                createSerializedError(e))
+                                    }
                                 }
-                        LOG.debug("Number of items received " + results.size)
-
-                        handler.post { flutterResult.success(results) }
+                        )
                     } catch (e: Exception) {
                         handler.post {
                             postExceptionToFlutterChannel(flutterResult, "DataStoreException",
@@ -187,14 +202,175 @@ class AmplifyDataStorePlugin : FlutterPlugin, MethodCallHandler {
                         }
                     }
                 },
-                {
-                    LOG.error("Query operation failed.", it)
+                { e ->
+                    LOG.error("Query operation failed.", e)
                     handler.post {
                         postExceptionToFlutterChannel(flutterResult, "DataStoreException",
-                                createSerializedError(it))
+                                createSerializedError(e))
                     }
                 }
         )
+    }
+
+    // accesses association data for a given set of models, and then queries the associated nested models
+    private fun queryNestedModels(
+            flutterSerializedModels: List<FlutterSerializedModel>,
+            onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit,
+            onQueryFailure: (e: DataStoreException) -> Unit
+    ) {
+        // if there are no models to find nested data for, invoke callback w/ the original list and return
+        if (flutterSerializedModels.isEmpty()) {
+            onQueryResults(flutterSerializedModels)
+            return
+        }
+
+        // grab associations from the first model
+        val firstModel = flutterSerializedModels[0].serializedModel
+        val associations = firstModel.modelSchema?.associations?.entries?.toMutableList()
+
+        // if there are no associations, invoke callback w/ the original list and return
+        if (associations == null || associations.isEmpty()) {
+            onQueryResults(flutterSerializedModels)
+            return
+        }
+
+        // transform association data into a hashmap with the nested model IDs, filter out relationships that are not BelongsTo or HasOne
+        val associationsMap = associations
+                .filter { association -> association.value.name == "BelongsTo" || association.value.name == "HasOne" }
+                .associateBy(
+                        { association -> association.key },
+                        { association -> Pair(association.value, getAssociatedModelIds(flutterSerializedModels, association)) }
+                )
+
+        // query the nested models for a list of models with the given associations data
+        queryAssociatedModels(flutterSerializedModels, associationsMap, onQueryResults, onQueryFailure )
+
+    }
+
+    // recursively queries the nested data for the given associations of a set of models
+    private fun queryAssociatedModels(
+            flutterSerializedModels: List<FlutterSerializedModel>,
+            associationsMap: Map<String, Pair<ModelAssociation, List<String>>>,
+            onQueryResults: (flutterSerializedModels: List<FlutterSerializedModel>) -> Unit,
+            onQueryFailure: (e: DataStoreException) -> Unit
+    ) {
+        // if there are no associations left, invoke callback and return
+        if (associationsMap.isEmpty()) {
+            onQueryResults(flutterSerializedModels)
+            return
+        }
+
+        val updatedAssociationsMap = associationsMap.toMutableMap()
+        val associationKey = updatedAssociationsMap.keys.first()
+        val associationPair = updatedAssociationsMap.remove(associationKey)!!
+
+        val association = associationPair.first
+        val associationIds = associationPair.second
+
+        // if there are no association ids, move to next association
+        if (associationIds.isEmpty()) {
+            queryAssociatedModels(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure)
+            return
+        }
+        val nestedModelName = association.associatedType
+        val queryOptions = whereIds(nestedModelName, associationIds)
+        batchedQuery(
+                nestedModelName,
+                queryOptions,
+                {
+                    val nestedModelHashMap = it.associateBy({ nestedModel -> nestedModel.id }, { nestedModel -> nestedModel })
+                    val nestedFlutterSerializedModels = mutableListOf<FlutterSerializedModel>()
+                    for (flutterSerializedModel in flutterSerializedModels) {
+                        val nestedSerializedModel = flutterSerializedModel.serializedModel.serializedData[associationKey] as SerializedModel
+                        val modelId = nestedSerializedModel.serializedData["id"].toString()
+                        val nestedModel = nestedModelHashMap[modelId]
+                        if (nestedModel != null) {
+                            val nestedFlutterSerializedModel = FlutterSerializedModel(nestedModel as SerializedModel)
+                            nestedFlutterSerializedModels.add(nestedFlutterSerializedModel)
+                            flutterSerializedModel.associations[associationKey] = nestedFlutterSerializedModel
+                        } else {
+                            // TODO: How to handle when the data is not found in the local DB (data not synced)
+                            LOG.error("Nested model $nestedModelName with ID $modelId was not in DB")
+                        }
+                    }
+                    // query nested models, then query the remaining associations of the current set of models
+                    queryNestedModels(
+                            nestedFlutterSerializedModels,
+                            { queryAssociatedModels(flutterSerializedModels, updatedAssociationsMap, onQueryResults, onQueryFailure) },
+                            onQueryFailure
+                    )
+                },
+                {
+                    onQueryFailure(it)
+                }
+        )
+    }
+
+    // performs a query for each set of QueryOptions and combines the results as if it were a single query
+    private fun batchedQuery(
+            modelName: String,
+            queryOptionsList: List<QueryOptions>,
+            onQueryResults: (result: List<Model>) -> Unit,
+            onQueryFailure: (e: DataStoreException) -> Unit,
+            previousResults: List<Model> = listOf()
+    ) {
+        val results = previousResults.toMutableList()
+        if (queryOptionsList.isEmpty()) {
+            onQueryResults(results)
+            return
+        }
+        val mutableQueryOptionsList = queryOptionsList.toMutableList()
+        val queryOptions = mutableQueryOptionsList.removeAt(0)
+        val plugin = Amplify.DataStore.getPlugin("awsDataStorePlugin") as AWSDataStorePlugin
+        plugin.query(
+                modelName,
+                queryOptions,
+                {
+                    results.addAll(it.asSequence())
+                    batchedQuery(modelName, mutableQueryOptionsList, onQueryResults, onQueryFailure, results)
+                },
+                onQueryFailure
+        )
+
+    }
+
+    // returns a list of associated model IDs for the given list of models and association
+    private fun getAssociatedModelIds(
+            flutterSerializedModels: List<FlutterSerializedModel>,
+            association: MutableMap.MutableEntry<String, ModelAssociation>
+    ): List<String> {
+        val results: MutableList<String> = mutableListOf()
+        val nestedModelKey = association.key
+        for (flutterSerializedModel in flutterSerializedModels) {
+            val nestedSerializedData = flutterSerializedModel.serializedModel.serializedData[nestedModelKey]
+            // if nestedSerializedData is not a SerializedModel, the data does not exist and should be skipped
+            // this is most likely the result of a non-required relationship
+            if (nestedSerializedData is SerializedModel) {
+                val nestedModelId = nestedSerializedData.serializedData["id"].toString()
+                results.add(nestedModelId)
+            }
+        }
+        return results
+    }
+
+    // creates a list of QueryOptions from the given model name and list of IDs. Based off of Where.id()
+    private fun whereIds(modelName: String, modelIds: List<String>): List<QueryOptions> {
+        val distinctModelIds = modelIds.toSet().toList()
+        // chunk the data to account for SQLite's max query depth of 1000
+        val chunkedModelsIds = distinctModelIds.chunked(995)
+        return chunkedModelsIds.map { modelIdsChunk ->
+            val idField = QueryField.field(modelName, PrimaryKey.fieldName())
+            if (modelIdsChunk.size == 1) {
+                Where.matches(idField.eq(modelIdsChunk[0]))
+            } else {
+                var match: QueryPredicateGroup = idField.eq(modelIdsChunk[0]).or(idField.eq(modelIdsChunk[1]))
+                for (i in 2 until modelIdsChunk.size) {
+                    match = match.or(idField.eq(modelIdsChunk[i]))
+                }
+                Where.matches(match)
+            }
+        }
+
     }
 
     @VisibleForTesting

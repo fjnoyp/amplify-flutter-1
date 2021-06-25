@@ -16,6 +16,8 @@
 package com.amazonaws.amplify.amplify_datastore.types.model
 
 import com.amplifyframework.core.model.Model
+import com.amplifyframework.core.model.ModelAssociation
+import com.amplifyframework.core.model.ModelSchema
 import com.amplifyframework.core.model.temporal.Temporal
 import com.amplifyframework.datastore.appsync.SerializedModel
 import java.lang.Exception
@@ -23,7 +25,7 @@ import java.lang.Exception
 
 data class FlutterSerializedModel(val serializedModel: SerializedModel) {
 
-    private val serializedData: Map<String, Any> = parseSerializedDataMap(serializedModel.serializedData)
+    val associations: MutableMap<String, FlutterSerializedModel> = HashMap();
 
     // ignored fields
     private val id: String = serializedModel.id
@@ -32,7 +34,7 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
     fun toMap(): Map<String, Any> {
         return mapOf(
                 "id" to id,
-                "serializedData" to serializedData,
+                "serializedData" to parseSerializedDataMap(),
                 "modelName" to modelName)
     }
 
@@ -41,11 +43,11 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
         else modelName!!
     }
 
-    private fun parseSerializedDataMap(serializedData: Map<String, Any>): Map<String, Any> {
+    private fun parseSerializedDataMap(): Map<String, Any> {
 
-        if(serializedData == null) throw Exception("FlutterSerializedModel - no serializedData")
+        if(serializedModel.serializedData == null) throw Exception("FlutterSerializedModel - no serializedData")
 
-        return serializedData.mapValues {
+        return serializedModel.serializedData.mapValues {
             when (val value: Any = it.value) {
                 is Temporal.DateTime -> value.format()
                 is Temporal.Date -> value.format()
@@ -56,6 +58,6 @@ data class FlutterSerializedModel(val serializedModel: SerializedModel) {
                 // It seems we can ignore collection types for now as we aren't returning lists of Models in hasMany relationships
                 else -> value
             }
-        }
+        }.plus(associations.mapValues { it.value.toMap() })
     }
 }
